@@ -84,7 +84,9 @@ public class ArquivosDuplicados extends JFrame {
                 return;
             }
 
-            resultArea.setText("Iniciando busca de arquivos duplicados com numeração...\n");
+            resultArea.setText("");  // Limpa a área de resultado
+            resultArea.append("Psta da busca atual: "+ selectedDirectory.getAbsolutePath() + "\n");
+            resultArea.append("Iniciando busca de arquivos duplicados com numeração...\n");
 
             Map<String, java.util.List<File>> duplicates = findDuplicateFilesWithNumber(selectedDirectory);
 
@@ -101,12 +103,6 @@ public class ArquivosDuplicados extends JFrame {
                     resultArea.append("\n");
                 }
                 deleteButton.setEnabled(true);  // Habilita o botão de deletar
-
-                // Confirmação para exclusão
-                // int response = JOptionPane.showConfirmDialog(null, "Deseja excluir os arquivos duplicados encontrados?", "Confirmação", JOptionPane.YES_NO_OPTION);
-                // if (response == JOptionPane.YES_OPTION) {
-                //     new DeleteAction().actionPerformed(null);  // Chama a ação de deletar diretamente
-                // }
             }
         }
     }
@@ -117,19 +113,29 @@ public class ArquivosDuplicados extends JFrame {
         public void actionPerformed(ActionEvent e) {
             Map<String, java.util.List<File>> duplicates = findDuplicateFilesWithNumber(selectedDirectory);
             int totalDeleted = 0;
+            long totalSizeDeleted = 0;  // Variável para armazenar o tamanho total excluído
 
             for (Map.Entry<String, java.util.List<File>> entry : duplicates.entrySet()) {
                 java.util.List<File> files = entry.getValue();
                 // Mantém o primeiro arquivo, exclui os outros que têm numeração
                 for (int i = 1; i < files.size(); i++) {
-                    if (files.get(i).delete()) {
+                    File fileToDelete = files.get(i);
+                    long fileSize = fileToDelete.length();  // Tamanho do arquivo antes de excluir
+                    if (fileToDelete.delete()) {
                         totalDeleted++;
+                        totalSizeDeleted += fileSize;  // Adiciona o tamanho do arquivo excluído
                     }
                 }
             }
 
-            resultArea.append("\n" + totalDeleted + " arquivos duplicados foram excluídos.");
             saveReport(duplicates, totalDeleted);
+
+            // Exibe o relatório final
+            resultArea.append("\n\n--== Relatório Geral ==--\n\n");
+            resultArea.append("Quantidade de arquivos excluídos: " + totalDeleted + "\n");
+            resultArea.append("Quantidade de espaço liberado: " + (1024 / (totalSizeDeleted / (1024.0 * 1024.0))) + " MB\n");  // Converte para MB
+            resultArea.append("Caminho completo do arquivo de relatório gerado: " + new File(selectedDirectory, "resumo.txt").getAbsolutePath() + "\n");
+
             deleteButton.setEnabled(false);  // Desabilita o botão após exclusão
         }
     }
