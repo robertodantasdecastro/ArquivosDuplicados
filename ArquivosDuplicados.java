@@ -133,8 +133,11 @@ public class ArquivosDuplicados extends JFrame {
             // Exibe o relatório final
             resultArea.append("\n\n--== Relatório Geral ==--\n\n");
             resultArea.append("Quantidade de arquivos excluídos: " + totalDeleted + "\n");
-            resultArea.append("Quantidade de espaço liberado: " + (1024 / (totalSizeDeleted / (1024.0 * 1024.0))) + " MB\n");  // Converte para MB
+            // Limita o espaço liberado a duas casas decimais
+            double totalSizeInMB = totalSizeDeleted / (1024.0 * 1024.0);  // Converte o tamanho total para MB
+            resultArea.append(String.format("Quantidade de espaço liberado: %.2f MB\n", totalSizeInMB));
             resultArea.append("Caminho completo do arquivo de relatório gerado: " + new File(selectedDirectory, "resumo.txt").getAbsolutePath() + "\n");
+
 
             deleteButton.setEnabled(false);  // Desabilita o botão após exclusão
         }
