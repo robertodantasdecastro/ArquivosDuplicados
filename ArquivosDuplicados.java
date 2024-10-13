@@ -15,6 +15,8 @@ public class ArquivosDuplicados extends JFrame {
     private JTextArea resultArea;
     private JButton searchButton;
     private JButton deleteButton;
+    private JProgressBar progressBar;  // Barra de progresso
+    private JLabel progressLabel;  // Rótulo para exibir o status
     private File selectedDirectory;
 
     public ArquivosDuplicados() {
@@ -24,17 +26,41 @@ public class ArquivosDuplicados extends JFrame {
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
-        // Painel superior com entrada de pasta e botão de pesquisa
+        // Painel superior com entrada de pasta, barra de progresso e botão de pesquisa
         JPanel topPanel = new JPanel();
-        topPanel.setLayout(new FlowLayout());
-
+        topPanel.setLayout(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+        
+        // Campo de texto para o caminho da pasta
         directoryPathField = new JTextField(30);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 2;
+        topPanel.add(directoryPathField, gbc);
+        
+        // Botão para escolher o diretório
         JButton browseButton = new JButton("Pesquisar...");
         browseButton.addActionListener(new BrowseAction());
+        gbc.gridx = 2;
+        gbc.gridy = 0;
+        gbc.gridwidth = 1;
+        topPanel.add(browseButton, gbc);
 
-        topPanel.add(new JLabel("Pasta:"));
-        topPanel.add(directoryPathField);
-        topPanel.add(browseButton);
+        // Barra de progresso e rótulo de status
+        progressLabel = new JLabel("Status: ");  // Rótulo que exibe o status
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 1;
+        topPanel.add(progressLabel, gbc);
+
+        progressBar = new JProgressBar(0, 100);  // Barra de progresso de 0 a 100
+        progressBar.setStringPainted(true);  // Exibe o valor da barra de progresso como texto
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        gbc.gridwidth = 2;
+        topPanel.add(progressBar, gbc);
 
         // Painel central com exibição do relatório
         resultArea = new JTextArea(15, 50);
@@ -55,6 +81,7 @@ public class ArquivosDuplicados extends JFrame {
         bottomPanel.add(searchButton); // Adiciona o botão de busca no painel inferior
         bottomPanel.add(deleteButton); // Adiciona o botão de deletar no painel inferior
 
+        // Adiciona o painel superior, a área de resultado e o painel inferior
         add(topPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
         add(bottomPanel, BorderLayout.SOUTH);
@@ -85,25 +112,59 @@ public class ArquivosDuplicados extends JFrame {
             }
 
             resultArea.setText("");  // Limpa a área de resultado
-            resultArea.append("Psta da busca atual: "+ selectedDirectory.getAbsolutePath() + "\n");
+            resultArea.append("Pasta da busca atual: " + selectedDirectory.getAbsolutePath() + "\n");
             resultArea.append("Iniciando busca de arquivos duplicados com numeração...\n");
 
-            Map<String, java.util.List<File>> duplicates = findDuplicateFilesWithNumber(selectedDirectory);
+            // Atualiza a barra de progresso e o rótulo de status
+            progressLabel.setText("Status: Buscando arquivos duplicados...");
+            progressBar.setValue(0);  // Reseta a barra de progresso
 
-            if (duplicates.isEmpty()) {
-                resultArea.append("Nenhum arquivo duplicado com numeração foi encontrado.");
-                deleteButton.setEnabled(false);  // Desabilita o botão de excluir se não houver duplicados
-            } else {
-                resultArea.append("Arquivos duplicados com numeração encontrados:\n\n");
-                for (Map.Entry<String, java.util.List<File>> entry : duplicates.entrySet()) {
-                    resultArea.append("Arquivo: " + entry.getValue().get(0).getName() + "\n");
-                    for (File file : entry.getValue()) {
-                        resultArea.append(" - " + file.getAbsolutePath() + "\n");
+            // Inicia a busca em uma nova thread
+            SwingWorker<Void, Integer> worker = new SwingWorker<Void, Integer>() {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    Map<String, java.util.List<File>> duplicates = findDuplicateFilesWithNumber(selectedDirectory);
+
+                    if (duplicates.isEmpty()) {
+                        resultArea.append("Nenhum arquivo duplicado com numeração foi encontrado.");
+                        deleteButton.setEnabled(false);  // Desabilita o botão de excluir se não houver duplicados
+                    } else {
+                        resultArea.append("Arquivos duplicados com numeração encontrados:\n\n");
+                        int totalFiles = duplicates.size();
+                        int processedFiles = 0;
+
+                        for (Map.Entry<String, java.util.List<File>> entry : duplicates.entrySet()) {
+                            resultArea.append("Arquivo: " + entry.getValue().get(0).getName() + "\n");
+                            for (File file : entry.getValue()) {
+                                resultArea.append(" - " + file.getAbsolutePath() + "\n");
+                            }
+                            resultArea.append("\n");
+
+                            // Atualiza a barra de progresso e o status
+                            processedFiles++;
+                            int progress = (int) ((processedFiles / (double) totalFiles) * 100);
+                            publish(progress);  // Envia o valor para a barra de progresso
+                        }
+                        deleteButton.setEnabled(true);  // Habilita o botão de deletar
                     }
-                    resultArea.append("\n");
+                    return null;
                 }
-                deleteButton.setEnabled(true);  // Habilita o botão de deletar
-            }
+
+                @Override
+                protected void process(java.util.List<Integer> chunks) {
+                    // Atualiza a barra de progresso
+                    for (int progress : chunks) {
+                        progressBar.setValue(progress);
+                    }
+                }
+
+                @Override
+                protected void done() {
+                    progressLabel.setText("Status: Busca concluída.");
+                    progressBar.setValue(100);  // Busca concluída
+                }
+            };
+            worker.execute();
         }
     }
 
@@ -111,35 +172,64 @@ public class ArquivosDuplicados extends JFrame {
     private class DeleteAction implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
-            Map<String, java.util.List<File>> duplicates = findDuplicateFilesWithNumber(selectedDirectory);
-            int totalDeleted = 0;
-            long totalSizeDeleted = 0;  // Variável para armazenar o tamanho total excluído
+            progressLabel.setText("Status: Excluindo arquivos duplicados...");
+            progressBar.setValue(0);  // Reseta a barra de progresso
 
-            for (Map.Entry<String, java.util.List<File>> entry : duplicates.entrySet()) {
-                java.util.List<File> files = entry.getValue();
-                // Mantém o primeiro arquivo, exclui os outros que têm numeração
-                for (int i = 1; i < files.size(); i++) {
-                    File fileToDelete = files.get(i);
-                    long fileSize = fileToDelete.length();  // Tamanho do arquivo antes de excluir
-                    if (fileToDelete.delete()) {
-                        totalDeleted++;
-                        totalSizeDeleted += fileSize;  // Adiciona o tamanho do arquivo excluído
+            SwingWorker<Void, Integer> worker = new SwingWorker<Void, Integer>() {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    Map<String, java.util.List<File>> duplicates = findDuplicateFilesWithNumber(selectedDirectory);
+                    int totalDeleted = 0;
+                    long totalSizeDeleted = 0;  // Variável para armazenar o tamanho total excluído
+
+                    int totalFiles = duplicates.size();
+                    int processedFiles = 0;
+
+                    for (Map.Entry<String, java.util.List<File>> entry : duplicates.entrySet()) {
+                        java.util.List<File> files = entry.getValue();
+                        // Mantém o primeiro arquivo, exclui os outros que têm numeração
+                        for (int i = 1; i < files.size(); i++) {
+                            File fileToDelete = files.get(i);
+                            long fileSize = fileToDelete.length();  // Tamanho do arquivo antes de excluir
+                            if (fileToDelete.delete()) {
+                                totalDeleted++;
+                                totalSizeDeleted += fileSize;  // Adiciona o tamanho do arquivo excluído
+                            }
+                        }
+                        processedFiles++;
+                        int progress = (int) ((processedFiles / (double) totalFiles) * 100);
+                        publish(progress);  // Envia o valor para a barra de progresso
+                    }
+
+                    saveReport(duplicates, totalDeleted);
+
+                    // Exibe o relatório final
+                    resultArea.append("\n\n--== Relatório Geral ==--\n\n");
+                    resultArea.append("Quantidade de arquivos excluídos: " + totalDeleted + "\n");
+                    // Limita o espaço liberado a duas casas decimais
+                    double totalSizeInMB = totalSizeDeleted / (1024.0 * 1024.0);  // Converte o tamanho total para MB
+                    resultArea.append(String.format("Quantidade de espaço liberado: %.2f MB\n", totalSizeInMB));
+                    resultArea.append("Caminho completo do arquivo de relatório gerado: " + new File(selectedDirectory, "resumo.txt").getAbsolutePath() + "\n");
+
+                    return null;
+                }
+
+                @Override
+                protected void process(java.util.List<Integer> chunks) {
+                    // Atualiza a barra de progresso
+                    for (int progress : chunks) {
+                        progressBar.setValue(progress);
                     }
                 }
-            }
 
-            saveReport(duplicates, totalDeleted);
-
-            // Exibe o relatório final
-            resultArea.append("\n\n--== Relatório Geral ==--\n\n");
-            resultArea.append("Quantidade de arquivos excluídos: " + totalDeleted + "\n");
-            // Limita o espaço liberado a duas casas decimais
-            double totalSizeInMB = totalSizeDeleted / (1024.0 * 1024.0);  // Converte o tamanho total para MB
-            resultArea.append(String.format("Quantidade de espaço liberado: %.2f MB\n", totalSizeInMB));
-            resultArea.append("Caminho completo do arquivo de relatório gerado: " + new File(selectedDirectory, "resumo.txt").getAbsolutePath() + "\n");
-
-
-            deleteButton.setEnabled(false);  // Desabilita o botão após exclusão
+                @Override
+                protected void done() {
+                    progressLabel.setText("Status: Exclusão concluída.");
+                    progressBar.setValue(100);  // Exclusão concluída
+                    deleteButton.setEnabled(false);  // Desabilita o botão após exclusão
+                }
+            };
+            worker.execute();
         }
     }
 
